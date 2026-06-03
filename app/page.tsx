@@ -15,6 +15,7 @@ import WorkoutTimer from '@/components/WorkoutTimer';
 import FocusMode from '@/components/FocusMode';
 import LunchMenu from '@/components/LunchMenu';
 import WeeklyProgress from '@/components/WeeklyProgress';
+import AiChat from '@/components/AiChat';
 
 export default function Home() {
   const [routines, setRoutines] = useState<RoutineItem[]>(DEFAULT_ROUTINES);
@@ -27,9 +28,15 @@ export default function Home() {
   const [showFocus, setShowFocus] = useState(false);
   const [showLunch, setShowLunch] = useState(false);
   const [showWeekly, setShowWeekly] = useState(false);
+  const [showAiChat, setShowAiChat] = useState(false);
 
-  // Track which alarms already fired today
-  const [firedAlarms, setFiredAlarms] = useState<Set<string>>(new Set());
+  // Track which alarms already fired today — persisted in localStorage
+  const [firedAlarms, setFiredAlarms] = useState<Set<string>>(() => {
+    if (typeof window === 'undefined') return new Set();
+    const today = new Date().toISOString().split('T')[0];
+    const stored = localStorage.getItem('fwl_fired_' + today);
+    return new Set(stored ? JSON.parse(stored) : []);
+  });
 
   // Snooze registry: { routineId: snoozeEndTime }
   const [snoozeMap, setSnoozeMap] = useState<Record<string, number>>({});
@@ -42,7 +49,7 @@ export default function Home() {
 
   // Clock tick every 30 seconds
   useEffect(() => {
-    const t = setInterval(() => setNow(new Date()), 30000);
+    const t = setInterval(() => setNow(new Date()), 10000);
     return () => clearInterval(t);
   }, []);
 
@@ -63,10 +70,10 @@ export default function Home() {
       const routineMins = h * 60 + m;
       const diff = nowMins - routineMins;
 
-      // Fire if within 0–2 minutes of scheduled time, not already fired, not done/skipped
+      // Fire if within 0–10 minutes of scheduled time, not already fired, not done/skipped
       if (
         diff >= 0 &&
-        diff <= 2 &&
+        diff <= 10 &&
         !firedAlarms.has(r.id) &&
         statuses[r.id] !== 'done' &&
         statuses[r.id] !== 'skip'
@@ -74,7 +81,12 @@ export default function Home() {
         // Check snooze
         if (snoozeMap[r.id] && Date.now() < snoozeMap[r.id]) continue;
 
-        setFiredAlarms(prev => new Set(prev).add(r.id));
+        setFiredAlarms(prev => {
+          const next = new Set(prev).add(r.id);
+          const today = new Date().toISOString().split('T')[0];
+          localStorage.setItem('fwl_fired_' + today, JSON.stringify([...next]));
+          return next;
+        });
         setAlarmRoutine(r);
         // Try browser notification
         if ('Notification' in window && Notification.permission === 'granted') {
@@ -290,6 +302,14 @@ export default function Home() {
             <span className="text-xl">📊</span>
             <span className="text-xs font-medium mt-0.5" style={{ color: '#9d174d' }}>Progress</span>
           </button>
+          <button
+            onClick={() => setShowAiChat(true)}
+            className="flex-1 flex flex-col items-center py-3 rounded-2xl shadow-sm active:scale-95"
+            style={{ background: '#e0f2fe' }}
+          >
+            <span className="text-xl">🤖</span>
+            <span className="text-xs font-medium mt-0.5" style={{ color: '#0369a1' }}>Ask AI</span>
+          </button>
         </div>
       </div>
 
@@ -345,6 +365,9 @@ export default function Home() {
 
       {/* Weekly progress modal */}
       {showWeekly && <WeeklyProgress onClose={() => setShowWeekly(false)} />}
+
+      {/* AI Chat modal */}
+      {showAiChat && <AiChat onClose={() => setShowAiChat(false)} />}
     </div>
   );
 }
