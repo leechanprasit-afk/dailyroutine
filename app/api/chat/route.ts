@@ -1,25 +1,7 @@
-import Anthropic from '@anthropic-ai/sdk';
+import { GoogleGenerativeAI } from '@google/generative-ai';
 import { NextRequest, NextResponse } from 'next/server';
 
-const client = new Anthropic({
-  apiKey: process.env.ANTHROPIC_API_KEY,
-});
-
-export async function POST(req: NextRequest) {
-  try {
-    const { message } = await req.json();
-
-    if (!process.env.ANTHROPIC_API_KEY) {
-      return NextResponse.json(
-        { error: 'API key not configured' },
-        { status: 500 }
-      );
-    }
-
-    const response = await client.messages.create({
-      model: 'claude-opus-4-5',
-      max_tokens: 1024,
-      system: `You are a helpful wellness and nutrition assistant for Lee, a woman focused on health, productivity, and building her online business.
+const SYSTEM_PROMPT = `You are a helpful wellness and nutrition assistant for Lee, a woman focused on health, productivity, and building her online business.
 
 Your role:
 - Suggest high-protein, easy-to-prepare meal ideas
@@ -32,17 +14,29 @@ Your role:
 
 For recipes: give ingredient list + simple steps
 For meal ideas: suggest 2-3 options with protein content
-Keep it simple and encouraging!`,
-      messages: [
-        { role: 'user', content: message }
-      ],
+Keep it simple and encouraging!`;
+
+export async function POST(req: NextRequest) {
+  try {
+    const { message } = await req.json();
+
+    if (!process.env.GEMINI_API_KEY) {
+      return NextResponse.json({ error: 'API key not configured' }, { status: 500 });
+    }
+
+    const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+    const model = genAI.getGenerativeModel({
+      model: 'gemini-1.5-flash',
+      systemInstruction: SYSTEM_PROMPT,
     });
 
-    const text = response.content[0].type === 'text' ? response.content[0].text : '';
+    const result = await model.generateContent(message);
+    const text = result.response.text();
+
     return NextResponse.json({ reply: text });
 
   } catch (error) {
     console.error('Chat error:', error);
-    return NextResponse.json({ error: 'Something went wrong' }, { status: 500 });
+    return NextResponse.json({ error: 'Something went wrong. Please try again.' }, { status: 500 });
   }
 }
